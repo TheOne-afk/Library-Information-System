@@ -52,31 +52,51 @@ Public Class Admin_Dashboard
     Sub loadCount()
         Try
             openCon()
+
+            ' Get the current year
+            Dim currentYear As Integer = DateTime.Now.Year
+
+            ' Count total books
             Dim cmd As New MySqlCommand("SELECT COUNT(*) FROM books", con)
-            Dim borrowedCmd As New MySqlCommand("SELECT COUNT(*) FROM borrowed WHERE status = 'borrowing'", con)
-            Dim returnedCmd As New MySqlCommand("SELECT COUNT(*) FROM borrowed WHERE status = 'returned'", con)
-            Dim lostCmd As New MySqlCommand("SELECT COUNT(*) FROM borrowed WHERE status = 'not returned'", con)
-            Dim damagedCmd As New MySqlCommand("SELECT COUNT(*) FROM borrowed WHERE status = 'damaged' OR status = 'lost'", con)
-            Dim userCmd As New MySqlCommand("SELECT COUNT(*) FROM user_credentials", con)
             Dim count As Int32 = CType(cmd.ExecuteScalar(), Int32)
-            Dim borrowedCount As Int32 = CType(borrowedCmd.ExecuteScalar(), Int32)
-            Dim returnedCount As Int32 = CType(returnedCmd.ExecuteScalar(), Int32)
-            Dim lostCount As Int32 = CType(lostCmd.ExecuteScalar(), Int32)
-            Dim damagedCount As Int32 = CType(damagedCmd.ExecuteScalar(), Int32)
-            Dim userCount As Int32 = CType(userCmd.ExecuteScalar(), Int32)
             Total_Books_Label.Text = String.Format("{0}", count)
+
+            ' Count borrowed books for the current year (based on due_date)
+            Dim borrowedCmd As New MySqlCommand("SELECT COUNT(*) FROM borrowed WHERE status = 'borrowing' AND YEAR(due_date) = @year", con)
+            borrowedCmd.Parameters.AddWithValue("@year", currentYear)
+            Dim borrowedCount As Int32 = CType(borrowedCmd.ExecuteScalar(), Int32)
             Borrowed_Books_Label.Text = String.Format("{0}", borrowedCount)
+
+            ' Count returned books for the current year (based on due_date)
+            Dim returnedCmd As New MySqlCommand("SELECT COUNT(*) FROM borrowed WHERE status = 'returned' AND YEAR(due_date) = @year", con)
+            returnedCmd.Parameters.AddWithValue("@year", currentYear)
+            Dim returnedCount As Int32 = CType(returnedCmd.ExecuteScalar(), Int32)
             Returned_Books_Label.Text = String.Format("{0}", returnedCount)
-            Label2.Text = String.Format("{0}", userCount)
+
+            ' Count books not returned (lost) for the current year (based on due_date)
+            Dim lostCmd As New MySqlCommand("SELECT COUNT(*) FROM borrowed WHERE status = 'not returned' AND YEAR(due_date) = @year", con)
+            lostCmd.Parameters.AddWithValue("@year", currentYear)
+            Dim lostCount As Int32 = CType(lostCmd.ExecuteScalar(), Int32)
             Label6.Text = String.Format("{0}", lostCount)
+
+            ' Count books damaged for the current year (based on due_date)
+            Dim damagedCmd As New MySqlCommand("SELECT COUNT(*) FROM borrowed WHERE status = 'damaged' AND YEAR(due_date) = @year", con)
+            damagedCmd.Parameters.AddWithValue("@year", currentYear)
+            Dim damagedCount As Int32 = CType(damagedCmd.ExecuteScalar(), Int32)
             Label8.Text = String.Format("{0}", damagedCount)
+
+            ' Count total users
+            Dim userCmd As New MySqlCommand("SELECT COUNT(*) FROM user_credentials", con)
+            Dim userCount As Int32 = CType(userCmd.ExecuteScalar(), Int32)
+            Label2.Text = String.Format("{0}", userCount)
+
         Catch ex As Exception
             MsgBox(ex.ToString)
         Finally
             con.Close()
-
         End Try
     End Sub
+
 
     ' ================================ BUTTONS ================================
     ' [ Drop Button ]
@@ -152,6 +172,7 @@ Public Class Admin_Dashboard
         manageUsers.Visible = False
         pageIndicator.Text = "Dashboard"
         loadCount()
+        LoadBorrowedData()
     End Sub
 
     Private Sub Button4_Click_1(sender As Object, e As EventArgs) Handles Button4.Click
@@ -566,19 +587,28 @@ Public Class Admin_Dashboard
 
     Private Sub LoadBorrowedData()
         Try
+            ' Clear existing data points
+            Chart1.Series("BorrowedBooks").Points.Clear()
+
+            ' Get the current year
+            Dim currentYear As Integer = DateTime.Now.Year
+
             ' Establish the database connection
             Dim conString As String = "server=localhost; database=library_information_system_database; username=root; password=;"
             Using con As New MySqlConnection(conString)
                 con.Open()
-                ' SQL query to get the count of borrowed books per month
+
+                ' SQL query to get the count of borrowed books for each month of the current year
                 Dim query As String = "
-                    SELECT DATE_FORMAT(borrowed_date, '%Y-%m') AS month, COUNT(*) AS count
-                    FROM borrowed
-                    GROUP BY DATE_FORMAT(borrowed_date, '%Y-%m')
-                    ORDER BY DATE_FORMAT(borrowed_date, '%Y-%m')
-                "
+                SELECT DATE_FORMAT(borrowed_date, '%Y-%m') AS month, COUNT(*) AS count
+                FROM borrowed
+                WHERE YEAR(borrowed_date) = @year
+                GROUP BY DATE_FORMAT(borrowed_date, '%Y-%m')
+                ORDER BY DATE_FORMAT(borrowed_date, '%Y-%m')
+            "
 
                 Using cmd As New MySqlCommand(query, con)
+                    cmd.Parameters.AddWithValue("@year", currentYear)
                     Using reader As MySqlDataReader = cmd.ExecuteReader()
                         While reader.Read()
                             Dim month As String = reader("month").ToString()
